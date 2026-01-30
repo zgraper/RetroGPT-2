@@ -173,7 +173,6 @@ def load_model():
         error_msg = str(e)[:200]  # Truncate but keep useful details
         st.error(f"❌ Failed to load GPT-2 model. Check requirements.txt and Streamlit build logs.\n\nError: {error_msg}")
         st.stop()
-        return None, None  # Never reached due to st.stop()
 
 def generate_response(model, tokenizer, prompt, max_new_tokens=100, temperature=0.8, top_p=0.9, repetition_penalty=1.1):
     """Generate response from GPT-2"""
@@ -183,6 +182,8 @@ def generate_response(model, tokenizer, prompt, max_new_tokens=100, temperature=
     # Keep last 900 tokens to leave room for generation
     if input_ids.shape[1] > 900:
         input_ids = input_ids[:, -900:]
+        # Decode the truncated prompt for accurate removal later
+        prompt = tokenizer.decode(input_ids[0], skip_special_tokens=True)
     
     # Generate with requirement 3 (max_new_tokens) and requirement 5 (repetition controls)
     with torch.no_grad():
@@ -346,7 +347,7 @@ def main():
         st.session_state.messages.append({"role": "user", "content": user_input})
         
         # Build conversation context
-        # Requirement 4: Use last 3 turns (6 messages = 3 user + 3 bot) instead of 5
+        # Requirement 4: Use last 6 messages instead of all (last 5 was the old behavior)
         conversation = ""
         for msg in st.session_state.messages[-6:]:
             if msg["role"] == "user":
