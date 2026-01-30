@@ -174,6 +174,8 @@ def generate_response(model, tokenizer, prompt, max_new_tokens=100, temperature=
     # Keep last 900 tokens to leave room for generation
     if input_ids.shape[1] > 900:
         input_ids = input_ids[:, -900:]
+        # Decode the truncated prompt for accurate removal later
+        prompt = tokenizer.decode(input_ids[0], skip_special_tokens=True)
     
     with torch.no_grad():
         output = model.generate(
@@ -201,7 +203,7 @@ def generate_response(model, tokenizer, prompt, max_new_tokens=100, temperature=
     return response
 
 def run_stress_test(model, tokenizer, test_type, num_iterations):
-    """Run various stress tests on the model"""
+    """Run a stress test with the specified test type and number of iterations"""
     results = []
     
     test_prompts = {
@@ -244,7 +246,7 @@ def run_stress_test(model, tokenizer, test_type, num_iterations):
             results.append({
                 "iteration": i + 1,
                 "prompt": prompt,
-                "response": f"Error: {str(e)[:100]}",
+                "response": f"Error: {str(e)[:200]}",
                 "time": 0,
                 "status": "❌ Failed"
             })
@@ -325,7 +327,7 @@ def main():
             results = run_stress_test(model, tokenizer, test_type, num_iterations)
         
         # Display results
-        total_time = sum(r["time"] for r in results)
+        total_time = sum(r["time"] for r in results) if results else 0
         success_count = sum(1 for r in results if "Success" in r["status"])
         avg_time = total_time / len(results) if results else 0
         
