@@ -1,6 +1,9 @@
 import streamlit as st
 from transformers import GPT2LMHeadModel, AutoTokenizer
 import torch
+import random
+import time
+import html
 
 # Page config
 st.set_page_config(
@@ -154,7 +157,7 @@ st.markdown("""
 @st.cache_resource
 def load_model():
     """Load GPT-2 model and tokenizer"""
-    model_name = "gpt2"  # Using the smallest GPT-2 model (124M parameters)
+    model_name = "gpt2"  # Using the smallest GPT-2 model (117M parameters)
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         model = GPT2LMHeadModel.from_pretrained(model_name)
@@ -171,8 +174,6 @@ def generate_response(model, tokenizer, prompt, max_length=100, temperature=0.8,
     """Generate response from GPT-2"""
     # Demo/fallback mode if model not available
     if model is None or tokenizer is None:
-        import random
-        import time
         time.sleep(0.5)  # Simulate processing
         demo_responses = [
             "That's an interesting point. In 2019, language models like me were still in their early stages.",
@@ -206,7 +207,10 @@ def generate_response(model, tokenizer, prompt, max_length=100, temperature=0.8,
     response = tokenizer.decode(output[0], skip_special_tokens=True)
     
     # Remove the prompt from response
-    response = response[len(prompt):].strip()
+    if len(response) > len(prompt):
+        response = response[len(prompt):].strip()
+    else:
+        response = response.strip()
     
     return response
 
@@ -289,11 +293,13 @@ def main():
     
     # Display chat messages
     for message in st.session_state.messages:
+        # Escape HTML to prevent XSS
+        escaped_content = html.escape(message["content"])
         if message["role"] == "user":
-            st.markdown(f'<div class="user-message"><b>👤 You:</b> {message["content"]}</div>', 
+            st.markdown(f'<div class="user-message"><b>👤 You:</b> {escaped_content}</div>', 
                        unsafe_allow_html=True)
         else:
-            st.markdown(f'<div class="bot-message"><b>🤖 GPT-2:</b> {message["content"]}</div>', 
+            st.markdown(f'<div class="bot-message"><b>🤖 GPT-2:</b> {escaped_content}</div>', 
                        unsafe_allow_html=True)
     
     st.markdown('</div>', unsafe_allow_html=True)
@@ -311,6 +317,15 @@ def main():
     
     # Handle user input
     if send_button and user_input:
+        # Validate input
+        if not user_input.strip():
+            st.warning("⚠️ Please enter a message.")
+            st.stop()
+        
+        if len(user_input) > 500:
+            st.warning("⚠️ Message too long. Please keep it under 500 characters.")
+            st.stop()
+        
         # Add user message
         st.session_state.messages.append({"role": "user", "content": user_input})
         

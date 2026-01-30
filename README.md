@@ -35,8 +35,7 @@ The app will open in your default browser at `http://localhost:8501`
 ## 🎨 Retro Design Elements
 
 - **Windows 95/98 Color Scheme**: Classic teal background with silver window frames
-- **VT323 Font**: Retro terminal-style font for headers
-- **Courier Prime**: Monospace font for authentic old-school web feel
+- **Monospace Fonts**: Courier New and system monospace fonts for authentic old-school web feel
 - **Outset/Inset Borders**: Classic 3D button effects from the 90s
 - **Box Shadows**: Depth effects mimicking old UI frameworks
 - **Blinking Title**: Just like those geocities websites!
