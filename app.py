@@ -1,8 +1,6 @@
 import streamlit as st
 from transformers import GPT2LMHeadModel, AutoTokenizer
 import torch
-import random
-import time
 import html
 
 # Page config
@@ -148,9 +146,9 @@ st.markdown("""
         margin: 20px 0;
     }
     
-    /* Hide Streamlit branding */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
+    /* Hide Streamlit branding - REMOVED per requirement (6) */
+    /* #MainMenu {visibility: hidden;} */
+    /* footer {visibility: hidden;} */
 </style>
 """, unsafe_allow_html=True)
 
@@ -158,6 +156,10 @@ st.markdown("""
 def load_model():
     """Load GPT-2 model and tokenizer"""
     model_name = "gpt2"  # Using the smallest GPT-2 model (117M parameters)
+    
+    # Limit CPU threads to reduce resource usage (requirement 4)
+    torch.set_num_threads(2)
+    
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         model = GPT2LMHeadModel.from_pretrained(model_name)
@@ -167,37 +169,31 @@ def load_model():
         
         return model, tokenizer
     except Exception as e:
-        st.warning(f"⚠️ Could not load GPT-2 model: {str(e)[:100]}... Using demo mode.")
-        return None, None
+        # Make failure explicit (requirement 7) - no demo mode
+        error_msg = str(e)[:200]  # Truncate but keep useful details
+        st.error(f"❌ Failed to load GPT-2 model. Check requirements.txt and Streamlit build logs.\n\nError: {error_msg}")
+        st.stop()
+        return None, None  # Never reached due to st.stop()
 
-def generate_response(model, tokenizer, prompt, max_length=100, temperature=0.8, top_p=0.9):
+def generate_response(model, tokenizer, prompt, max_new_tokens=100, temperature=0.8, top_p=0.9, repetition_penalty=1.1):
     """Generate response from GPT-2"""
-    # Demo/fallback mode if model not available
-    if model is None or tokenizer is None:
-        time.sleep(0.5)  # Simulate processing
-        demo_responses = [
-            "That's an interesting point. In 2019, language models like me were still in their early stages.",
-            "I appreciate your message! Back in my time, I could only predict the next word, not have real conversations.",
-            "Thanks for chatting! Remember, I'm from 2019 - before RLHF and instruction tuning existed.",
-            "Fascinating! As a 2019 model, my responses might seem simple compared to today's AI.",
-            "I hear you! In February 2019, when I was released, this level of interaction was cutting-edge.",
-            "Interesting question. My 117M parameters were considered large in 2019, but tiny by today's standards!",
-            "I see what you mean. Back then, we didn't have the sophisticated training methods that modern models use.",
-            "That's a good observation. I'm just doing next-token prediction, nothing fancy like ChatGPT!",
-        ]
-        return random.choice(demo_responses)
-    
-    # Real GPT-2 generation
-    # Encode input
+    # Requirement 3b: Truncate prompt to fit GPT-2 context (1024 tokens)
     input_ids = tokenizer.encode(prompt, return_tensors="pt")
     
-    # Generate
+    # Keep last 900 tokens to leave room for generation
+    if input_ids.shape[1] > 900:
+        input_ids = input_ids[:, -900:]
+    
+    # Generate with requirement 3 (max_new_tokens) and requirement 5 (repetition controls)
     with torch.no_grad():
         output = model.generate(
             input_ids,
-            max_length=max_length,
+            max_new_tokens=max_new_tokens,  # Requirement 3: use max_new_tokens instead of max_length
             temperature=temperature,
             top_p=top_p,
+            top_k=50,  # Requirement 5: stabilize sampling
+            repetition_penalty=repetition_penalty,  # Requirement 5: reduce loops
+            no_repeat_ngram_size=3,  # Requirement 5: prevent repetitive n-grams
             do_sample=True,
             pad_token_id=tokenizer.eos_token_id,
             num_return_sequences=1
@@ -234,13 +230,15 @@ def main():
         st.markdown("### ⚙️ Settings")
         st.markdown("---")
         
-        max_length = st.slider(
-            "Response Length",
+        # Requirement 3: Renamed "Response Length" to "Max new tokens"
+        # Requirement 4: Default set to 100 (reasonable for Community Cloud)
+        max_new_tokens = st.slider(
+            "Max new tokens",
             min_value=50,
             max_value=200,
             value=100,
             step=10,
-            help="Maximum length of generated response"
+            help="Maximum number of new tokens to generate"
         )
         
         temperature = st.slider(
@@ -259,6 +257,16 @@ def main():
             value=0.9,
             step=0.05,
             help="Nucleus sampling parameter"
+        )
+        
+        # Requirement 5: Add anti-repeat slider
+        repetition_penalty = st.slider(
+            "Anti-repeat penalty",
+            min_value=1.0,
+            max_value=2.0,
+            value=1.1,
+            step=0.1,
+            help="Higher values reduce repetition (default 1.1)"
         )
         
         st.markdown("---")
@@ -284,9 +292,17 @@ def main():
     if "messages" not in st.session_state:
         st.session_state.messages = []
     
-    # Load model
-    with st.spinner("⏳ Loading GPT-2 from 2019... Please wait..."):
-        model, tokenizer = load_model()
+    # Requirement 2: Store model/tokenizer in session_state to avoid reloading spinner
+    if "gpt2_model" not in st.session_state or "gpt2_tokenizer" not in st.session_state:
+        # First load - show spinner
+        with st.spinner("⏳ Loading GPT-2 from 2019... Please wait..."):
+            model, tokenizer = load_model()
+            st.session_state["gpt2_model"] = model
+            st.session_state["gpt2_tokenizer"] = tokenizer
+    else:
+        # Subsequent reruns - reuse from session_state (no spinner)
+        model = st.session_state["gpt2_model"]
+        tokenizer = st.session_state["gpt2_tokenizer"]
     
     # Chat container
     st.markdown('<div class="chat-container">', unsafe_allow_html=True)
@@ -330,8 +346,9 @@ def main():
         st.session_state.messages.append({"role": "user", "content": user_input})
         
         # Build conversation context
+        # Requirement 4: Use last 3 turns (6 messages = 3 user + 3 bot) instead of 5
         conversation = ""
-        for msg in st.session_state.messages[-5:]:  # Use last 5 messages for context
+        for msg in st.session_state.messages[-6:]:
             if msg["role"] == "user":
                 conversation += f"User: {msg['content']}\n"
             else:
@@ -341,20 +358,16 @@ def main():
         
         # Generate response
         with st.spinner("🤔 GPT-2 is thinking..."):
-            # Calculate max_length properly
-            if tokenizer is not None:
-                prompt_length = len(tokenizer.encode(conversation))
-                total_max_length = prompt_length + max_length
-            else:
-                total_max_length = max_length
-            
+            # Requirement 3: No manual prompt_length + max_length logic
+            # Just pass max_new_tokens directly
             response = generate_response(
                 model, 
                 tokenizer, 
                 conversation,
-                max_length=total_max_length,
+                max_new_tokens=max_new_tokens,
                 temperature=temperature,
-                top_p=top_p
+                top_p=top_p,
+                repetition_penalty=repetition_penalty
             )
         
         # Add bot response
