@@ -1,5 +1,5 @@
 import streamlit as st
-from transformers import GPT2LMHeadModel, GPT2Tokenizer
+from transformers import GPT2LMHeadModel, AutoTokenizer
 import torch
 
 # Page config
@@ -12,20 +12,17 @@ st.set_page_config(
 # Retro 90s/2000s CSS styling
 st.markdown("""
 <style>
-    /* Import retro font */
-    @import url('https://fonts.googleapis.com/css2?family=Courier+Prime&family=VT323&display=swap');
-    
     /* Main background - classic Windows 95/98 teal */
     .stApp {
         background: linear-gradient(180deg, #008080 0%, #006666 100%);
-        font-family: 'Courier Prime', monospace;
+        font-family: 'Courier New', monospace;
     }
     
     /* Title styling - retro web 1.0 */
     h1 {
         color: #00FF00;
         text-align: center;
-        font-family: 'VT323', monospace;
+        font-family: monospace;
         font-size: 4em !important;
         text-shadow: 3px 3px 0px #000000, 6px 6px 0px #333333;
         animation: blink 2s infinite;
@@ -45,7 +42,7 @@ st.markdown("""
         padding: 15px;
         margin: 20px 0;
         box-shadow: 8px 8px 0px rgba(0,0,0,0.5);
-        font-family: 'Courier Prime', monospace;
+        font-family: 'Courier New', monospace;
     }
     
     /* Message styling */
@@ -54,7 +51,7 @@ st.markdown("""
         border: 2px solid #000000;
         padding: 10px;
         margin: 10px 0;
-        font-family: 'Courier Prime', monospace;
+        font-family: 'Courier New', monospace;
         color: #000000;
         box-shadow: 3px 3px 0px rgba(0,0,0,0.3);
     }
@@ -64,7 +61,7 @@ st.markdown("""
         border: 2px solid #000000;
         padding: 10px;
         margin: 10px 0;
-        font-family: 'Courier Prime', monospace;
+        font-family: 'Courier New', monospace;
         color: #000000;
         box-shadow: 3px 3px 0px rgba(0,0,0,0.3);
     }
@@ -73,7 +70,7 @@ st.markdown("""
     .stTextInput > div > div > input {
         background: #FFFFFF;
         border: 2px inset #808080;
-        font-family: 'Courier Prime', monospace;
+        font-family: 'Courier New', monospace;
         color: #000000;
         border-radius: 0;
     }
@@ -84,7 +81,7 @@ st.markdown("""
         border: 2px outset #FFFFFF;
         border-radius: 0;
         color: #000000;
-        font-family: 'Courier Prime', monospace;
+        font-family: 'Courier New', monospace;
         font-weight: bold;
         padding: 8px 24px;
         box-shadow: 3px 3px 0px rgba(0,0,0,0.3);
@@ -110,14 +107,14 @@ st.markdown("""
     [data-testid="stSidebar"] h2, 
     [data-testid="stSidebar"] h3 {
         color: #FFFF00;
-        font-family: 'VT323', monospace;
+        font-family: monospace;
         text-shadow: 2px 2px 0px #000000;
     }
     
     [data-testid="stSidebar"] p,
     [data-testid="stSidebar"] label {
         color: #FFFFFF;
-        font-family: 'Courier Prime', monospace;
+        font-family: 'Courier New', monospace;
     }
     
     /* Info box */
@@ -126,7 +123,7 @@ st.markdown("""
         border: 3px double #000000;
         padding: 15px;
         margin: 20px 0;
-        font-family: 'Courier Prime', monospace;
+        font-family: 'Courier New', monospace;
         color: #000000;
     }
     
@@ -137,7 +134,7 @@ st.markdown("""
         padding: 5px 10px;
         border: 2px solid #000000;
         display: inline-block;
-        font-family: 'VT323', monospace;
+        font-family: monospace;
         font-size: 1.5em;
         box-shadow: 3px 3px 0px rgba(0,0,0,0.5);
     }
@@ -158,16 +155,38 @@ st.markdown("""
 def load_model():
     """Load GPT-2 model and tokenizer"""
     model_name = "gpt2"  # Using the smallest GPT-2 model (124M parameters)
-    tokenizer = GPT2Tokenizer.from_pretrained(model_name)
-    model = GPT2LMHeadModel.from_pretrained(model_name)
-    
-    # Set pad token
-    tokenizer.pad_token = tokenizer.eos_token
-    
-    return model, tokenizer
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = GPT2LMHeadModel.from_pretrained(model_name)
+        
+        # Set pad token
+        tokenizer.pad_token = tokenizer.eos_token
+        
+        return model, tokenizer
+    except Exception as e:
+        st.warning(f"⚠️ Could not load GPT-2 model: {str(e)[:100]}... Using demo mode.")
+        return None, None
 
 def generate_response(model, tokenizer, prompt, max_length=100, temperature=0.8, top_p=0.9):
     """Generate response from GPT-2"""
+    # Demo/fallback mode if model not available
+    if model is None or tokenizer is None:
+        import random
+        import time
+        time.sleep(0.5)  # Simulate processing
+        demo_responses = [
+            "That's an interesting point. In 2019, language models like me were still in their early stages.",
+            "I appreciate your message! Back in my time, I could only predict the next word, not have real conversations.",
+            "Thanks for chatting! Remember, I'm from 2019 - before RLHF and instruction tuning existed.",
+            "Fascinating! As a 2019 model, my responses might seem simple compared to today's AI.",
+            "I hear you! In February 2019, when I was released, this level of interaction was cutting-edge.",
+            "Interesting question. My 117M parameters were considered large in 2019, but tiny by today's standards!",
+            "I see what you mean. Back then, we didn't have the sophisticated training methods that modern models use.",
+            "That's a good observation. I'm just doing next-token prediction, nothing fancy like ChatGPT!",
+        ]
+        return random.choice(demo_responses)
+    
+    # Real GPT-2 generation
     # Encode input
     input_ids = tokenizer.encode(prompt, return_tensors="pt")
     
@@ -307,11 +326,18 @@ def main():
         
         # Generate response
         with st.spinner("🤔 GPT-2 is thinking..."):
+            # Calculate max_length properly
+            if tokenizer is not None:
+                prompt_length = len(tokenizer.encode(conversation))
+                total_max_length = prompt_length + max_length
+            else:
+                total_max_length = max_length
+            
             response = generate_response(
                 model, 
                 tokenizer, 
                 conversation,
-                max_length=len(tokenizer.encode(conversation)) + max_length,
+                max_length=total_max_length,
                 temperature=temperature,
                 top_p=top_p
             )
@@ -327,7 +353,7 @@ def main():
     st.markdown("""
     <center>
     <div class="retro-badge">Est. 2019</div>
-    <p style="color: #FFFFFF; font-family: 'VT323', monospace; font-size: 1.2em;">
+    <p style="color: #FFFFFF; font-family: monospace; font-size: 1.2em;">
     🌐 Powered by GPT-2 • Built with Streamlit 🌐<br>
     <i>A nostalgic journey through the early days of large language models</i>
     </p>
